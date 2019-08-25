@@ -12,13 +12,13 @@ int main(int argc, char **argv) {
     QHBoxLayout layout;
     centerwidget.setLayout(&layout);
 
-    SnakeGameBoard board;
-    Snake snake;
-    SnakeGame game(&board, &snake);
-    layout.addWidget(&board);
+
+    SnakeGame game;
+    layout.addWidget(&game);
 
     win.resize(600, 400);
     game.setFocus();
+
     win.show();
 
     return App.exec();

@@ -10,10 +10,10 @@ void SnakeGameBoard::paintEvent(QPaintEvent *) {
     p.setPen(Qt::transparent);
     p.setRenderHint(QPainter::RenderHint::HighQualityAntialiasing);
     auto r = rect();
-    auto rowCount = r.height() / m_blockHeight;
-    auto columnCount = r.width() / m_blockWidth;
-    for (int i = 0; i < rowCount; i++) {
-        for (int j = 0; j < columnCount; j++) {
+    auto rc = rowCount();
+    auto cc = columnCount();
+    for (int i = 0; i < rc; i++) {
+        for (int j = 0; j < cc; j++) {
             p.setBrush(
                 QBrush((i + j) % 2 ? QColor("#A7D948") : QColor("#8ECC39")));
             p.drawRect(QRect(QPoint(m_blockWidth * j, i * m_blockHeight),
@@ -27,6 +27,10 @@ int SnakeGameBoard::blockWidth() const { return m_blockWidth; }
 void SnakeGameBoard::setBlockWidth(int blockWidth) {
     m_blockWidth = blockWidth;
 }
+
+int SnakeGameBoard::rowCount() const { return height() / m_blockHeight; }
+
+int SnakeGameBoard::columnCount() const { return width() / m_blockWidth; }
 
 int SnakeGameBoard::blockHeight() const { return m_blockHeight; }
 
@@ -103,47 +107,62 @@ void Snake::move_impl() {
 }
 
 #include <QTimer>
-SnakeGame::SnakeGame(SnakeGameBoard *b, Snake *s)
-    : m_board{b}, m_snake{s}, QWidget(b) {
-    resize(b->width(), b->height());
+SnakeGame::SnakeGame(QWidget *parent) : SnakeGameBoard(parent), m_snake(this) {
+
+    resetApplePos();
+
     auto t = new QTimer(this);
-    t->setInterval(400);
-    m_snake->setDirection(Snake::Direction::Down);
-    m_snake->grow();
-    m_snake->grow();
+    t->setInterval(200);
+    m_snake.setDirection(Snake::Direction::Down);
     connect(t, &QTimer::timeout, [this]() {
-        m_snake->move();
+        m_snake.move();
+        if (m_snake.head() == m_applePos) {
+            m_snake.grow();
+            resetApplePos();
+        }
         this->update();
     });
     t->start();
     setFocus();
 }
 
-void SnakeGame::paintEvent(QPaintEvent *event) {
-    QPainter p(this);
-    p.setRenderHint(QPainter::RenderHint::Antialiasing);
-    auto h = m_snake->head();
-    QRect r{h.x() * m_board->blockWidth(), h.y() * m_board->blockHeight(),
-            m_board->blockWidth(), m_board->blockHeight()};
-    p.drawChord(r, 0, 360 * 16);
-
-    for (auto& t : m_snake->tail()) {
-        r.setX(t.x() * m_board->blockWidth());
-        r.setY(t.y() * m_board->blockHeight());
-        r.setWidth(m_board->blockWidth());
-        r.setHeight(m_board->blockHeight());
-        p.drawChord(r, 0, 360 * 16);
-    }
+void SnakeGame::resetApplePos() {
+    const auto tail = m_snake.tail();
+    do {
+        m_applePos = QPoint{rand() % columnCount(), rand() % rowCount()};
+    } while (m_applePos == m_snake.head() ||
+             std::find(tail.begin(), tail.end(), m_applePos) != tail.end());
 }
 
-void SnakeGame::keyPressEvent(QKeyEvent *event)
-{
+void SnakeGame::paintEvent(QPaintEvent *event) {
+    SnakeGameBoard::paintEvent(event);
+    QPainter p(this);
+    p.setRenderHint(QPainter::RenderHint::Antialiasing);
+    auto h = m_snake.head();
+    QRect r{h.x() * blockWidth(), h.y() * blockHeight(), blockWidth(),
+            blockHeight()};
+    p.drawChord(r, 0, 360 * 16);
+
+    for (auto &t : m_snake.tail()) {
+        r.setX(t.x() * blockWidth());
+        r.setY(t.y() * blockHeight());
+        r.setWidth(blockWidth());
+        r.setHeight(blockHeight());
+        p.drawChord(r, 0, 360 * 16);
+    }
+
+    r = QRect({m_applePos.x() * blockWidth(), m_applePos.y() * blockHeight()},
+              QSize(blockWidth(), blockHeight()));
+    p.drawChord(r, 0, 360 * 16);
+}
+
+void SnakeGame::keyPressEvent(QKeyEvent *event) {
     if (event->key() == Qt::Key_Up)
-        m_snake->setDirection(Snake::Up);
-    else if(event->key() == Qt::Key_Down)
-        m_snake->setDirection(Snake::Down);
+        m_snake.setDirection(Snake::Up);
+    else if (event->key() == Qt::Key_Down)
+        m_snake.setDirection(Snake::Down);
     else if (event->key() == Qt::Key_Left)
-        m_snake->setDirection(Snake::Left);
+        m_snake.setDirection(Snake::Left);
     else if (event->key() == Qt::Key_Right)
-        m_snake->setDirection(Snake::Right);
+        m_snake.setDirection(Snake::Right);
 }
