@@ -1,10 +1,10 @@
 #ifndef SNAKEGAMEVIEW_H
 #define SNAKEGAMEVIEW_H
 
+#include <QTimer>
 #include <QWidget>
 #include <deque>
 #include <mutex>
-#include <QTimer>
 
 class SnakeGameBoard : public QWidget {
     Q_OBJECT
@@ -33,9 +33,9 @@ private:
 class Snake : QObject {
     Q_OBJECT
 public:
-    Snake(QObject * parent = nullptr);
+    Snake(QObject *parent = nullptr);
 
-    enum Direction { Stalled, Up, Down, Left, Right };
+    enum Direction { Up, Down, Left, Right };
     void move();
     void grow();
     void reset();

@@ -8,7 +8,7 @@ SnakeGameBoard::SnakeGameBoard(QWidget *parent) : QWidget(parent) {
     pol.setHeightForWidth(true);
 }
 
-void SnakeGameBoard::paintEvent(QPaintEvent *r) {
+void SnakeGameBoard::paintEvent(QPaintEvent *) {
     QPainter p(this);
 
     p.setPen(Qt::transparent);
@@ -30,7 +30,7 @@ void SnakeGameBoard::paintEvent(QPaintEvent *r) {
         QRect(QPoint(0, 0), QSize(cc * m_blockWidth, rc * m_blockHeight)));
 }
 
-void SnakeGameBoard::resizeEvent(QResizeEvent *event) {
+void SnakeGameBoard::resizeEvent(QResizeEvent *) {
     resize(m_blockWidth * columnCount(), m_blockHeight * rowCount());
     updateGeometry();
 }
@@ -74,6 +74,7 @@ void Snake::grow() {
         break;
     case Direction::Left:
         newHead.rx()++;
+        break;
     }
 
     m_tail.push_front(m_head);
@@ -130,7 +131,7 @@ void Snake::move_impl() {
 
 SnakeGame::SnakeGame(QWidget *parent) : SnakeGameBoard(parent), m_snake(this) {
     reset();
-    m_timer.setInterval(200);
+    m_timer.setInterval(150);
     connect(&m_timer, &QTimer::timeout, this, &SnakeGame::updateGame);
     m_timer.start();
     setFocus();
@@ -167,11 +168,53 @@ void SnakeGame::paintEvent(QPaintEvent *event) {
 
     QPainter p(this);
     p.setRenderHint(QPainter::RenderHint::Antialiasing);
+
+    const static auto snakeColor = QColor(0x4775EA);
+
+    p.drawImage(
+        QRect({m_applePos.x() * blockWidth(), m_applePos.y() * blockHeight()},
+              QSize(blockWidth(), blockHeight())),
+        QImage(":/apple.png"));
+
     auto h = m_snake.head();
     QRect r{h.x() * blockWidth(), h.y() * blockHeight(), blockWidth(),
             blockHeight()};
+    p.setBrush(QBrush(snakeColor));
     p.drawChord(r, 0, 360 * 16);
 
+    p.setBrush(QBrush(Qt::black));
+    QPoint e1, e2;
+    constexpr float f1 = .30, f2 = .70;
+    switch (m_snake.direction()) {
+    case Snake::Direction::Up:
+        e1 =
+            QPoint(r.x() + (blockWidth() * f1), r.y() + (blockHeight() * f1));
+        e2 =
+            QPoint(r.x() + (blockWidth() * f2), r.y() + (blockHeight() * f1));
+        break;
+    case Snake::Direction::Down:
+        e1 =
+            QPoint(r.x() + (blockWidth() * f1), r.y() + (blockHeight() * f2));
+        e2 =
+            QPoint(r.x() + (blockWidth() * f2), r.y() + (blockHeight() * f2));
+        break;
+    case Snake::Direction::Left:
+        e1 =
+            QPoint(r.x() + (blockWidth() * f1), r.y() + (blockHeight() * f1));
+        e2 =
+            QPoint(r.x() + (blockWidth() * f1), r.y() + (blockHeight() * f2));
+        break;
+    case Snake::Direction::Right:
+        e1 =
+            QPoint(r.x() + (blockWidth() * f2), r.y() + (blockHeight() * f1));
+        e2 =
+            QPoint(r.x() + (blockWidth() * f2), r.y() + (blockHeight() * f2));
+        break;
+    }
+    p.drawChord(QRect(e1, QSize(2, 2)), 0, 360 * 16);
+    p.drawChord(QRect(e2, QSize(2, 2)), 0, 360 * 16);
+
+    p.setBrush(QBrush(snakeColor));
     for (auto &t : m_snake.tail()) {
         r.setX(t.x() * blockWidth());
         r.setY(t.y() * blockHeight());
@@ -179,10 +222,6 @@ void SnakeGame::paintEvent(QPaintEvent *event) {
         r.setHeight(blockHeight());
         p.drawChord(r, 0, 360 * 16);
     }
-
-    r = QRect({m_applePos.x() * blockWidth(), m_applePos.y() * blockHeight()},
-              QSize(blockWidth(), blockHeight()));
-    p.drawImage(r, QImage(":/apple.png"));
 }
 
 void SnakeGame::keyPressEvent(QKeyEvent *event) {
@@ -215,10 +254,9 @@ void SnakeGame::updateGame() {
 bool SnakeGame::isCollision() {
     auto h = m_snake.head();
 
-    if (h.x() >= columnCount() || h.x() < 0 || h.y() >= rowCount() || h.y() < 0) {
+    if (h.x() >= columnCount() || h.x() < 0 || h.y() >= rowCount() ||
+        h.y() < 0) {
         return true;
     }
     return false;
-    //const auto& t = m_snake.tail();
-   // return std::find(t.begin(), t.end(), h) != t.end();
 }

@@ -28,10 +28,10 @@ int main(int argc, char **argv) {
 
     QLabel status;
     layout.addWidget(&status);
-    status.setStyleSheet("color: darkviolet; font: bold 16px");
+    status.setStyleSheet("color: red; font: 16px");
     status.setAlignment(Qt::AlignCenter);
     QTimer statusClear;
-    statusClear.setInterval(1000);
+    statusClear.setInterval(4000);
     QObject::connect(&statusClear, &QTimer::timeout, [&]() {
         status.setText("");
     });
