@@ -3,13 +3,16 @@
 #include <QPaintEvent>
 #include <QPainter>
 
-SnakeGameBoard::SnakeGameBoard(QWidget *parent) : QWidget(parent) {}
+SnakeGameBoard::SnakeGameBoard(QWidget *parent) : QWidget(parent) {
+    auto pol = sizePolicy();
+    pol.setHeightForWidth(true);
+}
 
-void SnakeGameBoard::paintEvent(QPaintEvent *) {
+void SnakeGameBoard::paintEvent(QPaintEvent *r) {
     QPainter p(this);
+
     p.setPen(Qt::transparent);
-    p.setRenderHint(QPainter::RenderHint::HighQualityAntialiasing);
-    auto r = rect();
+    p.setRenderHint(QPainter::RenderHint::Antialiasing);
     auto rc = rowCount();
     auto cc = columnCount();
     for (int i = 0; i < rc; i++) {
@@ -20,6 +23,16 @@ void SnakeGameBoard::paintEvent(QPaintEvent *) {
                              QSize(m_blockWidth, m_blockHeight)));
         }
     }
+
+    p.setPen(QPen(Qt::darkGray, 2));
+    p.setBrush(QBrush(Qt::transparent));
+    p.drawRect(
+        QRect(QPoint(0, 0), QSize(cc * m_blockWidth, rc * m_blockHeight)));
+}
+
+void SnakeGameBoard::resizeEvent(QResizeEvent *event) {
+    resize(m_blockWidth * columnCount(), m_blockHeight * rowCount());
+    updateGeometry();
 }
 
 int SnakeGameBoard::blockWidth() const { return m_blockWidth; }
@@ -32,16 +45,21 @@ int SnakeGameBoard::rowCount() const { return height() / m_blockHeight; }
 
 int SnakeGameBoard::columnCount() const { return width() / m_blockWidth; }
 
+QSize SnakeGameBoard::sizeHint() const {
+    return QSize(m_blockWidth * columnCount(), m_blockHeight * rowCount());
+}
+
 int SnakeGameBoard::blockHeight() const { return m_blockHeight; }
 
 void SnakeGameBoard::setBlockHeight(int blockHeight) {
     m_blockHeight = blockHeight;
 }
 
+Snake::Snake(QObject *parent) : QObject(parent) { reset(); }
+
 void Snake::move() { move_impl(); }
 
 void Snake::grow() {
-    std::scoped_lock<std::mutex> s(m_mutex);
     auto newHead = m_head;
 
     switch (m_direction) {
@@ -62,6 +80,12 @@ void Snake::grow() {
     m_head = newHead;
 }
 
+void Snake::reset() {
+    m_head = {0, 0};
+    m_tail.clear();
+    m_direction = Right;
+}
+
 Snake::Direction Snake::direction() const { return m_direction; }
 
 void Snake::setDirection(Direction direction) {
@@ -74,7 +98,6 @@ void Snake::setDirection(Direction direction) {
     if (m_direction == Down && direction == Up)
         return;
 
-    std::scoped_lock<std::mutex> s(m_mutex);
     m_direction = direction;
 }
 
@@ -83,7 +106,6 @@ const std::deque<QPoint> &Snake::tail() const { return m_tail; }
 QPoint Snake::head() const { return m_head; }
 
 void Snake::move_impl() {
-    std::scoped_lock<std::mutex> s(m_mutex);
     auto newHead = m_head;
 
     switch (m_direction) {
@@ -106,24 +128,23 @@ void Snake::move_impl() {
     m_head = newHead;
 }
 
-#include <QTimer>
 SnakeGame::SnakeGame(QWidget *parent) : SnakeGameBoard(parent), m_snake(this) {
-
-    resetApplePos();
-
-    auto t = new QTimer(this);
-    t->setInterval(200);
-    m_snake.setDirection(Snake::Direction::Down);
-    connect(t, &QTimer::timeout, [this]() {
-        m_snake.move();
-        if (m_snake.head() == m_applePos) {
-            m_snake.grow();
-            resetApplePos();
-        }
-        this->update();
-    });
-    t->start();
+    reset();
+    m_timer.setInterval(200);
+    connect(&m_timer, &QTimer::timeout, this, &SnakeGame::updateGame);
+    m_timer.start();
     setFocus();
+}
+
+size_t SnakeGame::score() const { return m_score; }
+
+void SnakeGame::reset() {
+    m_timer.stop();
+    resetApplePos();
+    m_score = 0;
+    m_snake.reset();
+    emit scoreChanged();
+    m_timer.start();
 }
 
 void SnakeGame::resetApplePos() {
@@ -134,8 +155,16 @@ void SnakeGame::resetApplePos() {
              std::find(tail.begin(), tail.end(), m_applePos) != tail.end());
 }
 
+Qt::GlobalColor randomColor() {
+    static Qt::GlobalColor palleteColor[] = {Qt::blue, Qt::darkMagenta,
+                                             Qt::magenta};
+    return palleteColor[rand() %
+                        (sizeof(palleteColor) / sizeof(palleteColor[0]))];
+}
+
 void SnakeGame::paintEvent(QPaintEvent *event) {
     SnakeGameBoard::paintEvent(event);
+
     QPainter p(this);
     p.setRenderHint(QPainter::RenderHint::Antialiasing);
     auto h = m_snake.head();
@@ -153,7 +182,7 @@ void SnakeGame::paintEvent(QPaintEvent *event) {
 
     r = QRect({m_applePos.x() * blockWidth(), m_applePos.y() * blockHeight()},
               QSize(blockWidth(), blockHeight()));
-    p.drawChord(r, 0, 360 * 16);
+    p.drawImage(r, QImage(":/apple.png"));
 }
 
 void SnakeGame::keyPressEvent(QKeyEvent *event) {
@@ -165,4 +194,31 @@ void SnakeGame::keyPressEvent(QKeyEvent *event) {
         m_snake.setDirection(Snake::Left);
     else if (event->key() == Qt::Key_Right)
         m_snake.setDirection(Snake::Right);
+}
+
+void SnakeGame::updateGame() {
+    if (m_snake.head() == m_applePos) {
+        m_score++;
+        emit scoreChanged();
+        m_snake.grow();
+        resetApplePos();
+        m_snake.move();
+    } else if (isCollision()) {
+        reset();
+        emit collisioned();
+    } else {
+        m_snake.move();
+    }
+    this->update();
+}
+
+bool SnakeGame::isCollision() {
+    auto h = m_snake.head();
+
+    if (h.x() >= columnCount() || h.x() < 0 || h.y() >= rowCount() || h.y() < 0) {
+        return true;
+    }
+    return false;
+    //const auto& t = m_snake.tail();
+   // return std::find(t.begin(), t.end(), h) != t.end();
 }

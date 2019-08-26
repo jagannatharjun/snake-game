@@ -17,3 +17,7 @@ SOURCES += \
 
 HEADERS += \
     snakegameview.h
+
+RESOURCES += \
+    res.qrc
+
